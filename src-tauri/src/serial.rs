@@ -36,67 +36,80 @@ impl SerialWorker {
     let stop = Arc::new(AtomicBool::new(false));
     let stop_c = stop.clone();
     let handle = std::thread::spawn(move || {
-      let mut last_active_code: Option<String> = None;
-      let mut awaiting_reset = false;
-      let mut standby_count: u32 = 0;
-      match serialport::new(&port_name, 9600)
-        .timeout(Duration::from_millis(200))
-        .open() {
-          Ok(mut port) => {
-            let _ = app.emit("serial-connected", &port_name);
-            let mut buf = [0u8; 1024];
-            while !stop_c.load(Ordering::Relaxed) {
-              match port.read(&mut buf) {
-                Ok(n) if n > 0 => {
-                  let s = String::from_utf8_lossy(&buf[..n]).to_string();
-                  let _ = app.emit("serial-data", &s);
-                  // treat 99: as standby pulse
-                  if s.contains("99:") {
-                    let _ = app.emit("serial-standby-ok", &());
-                    if awaiting_reset {
-                      standby_count = standby_count.saturating_add(1);
-                      if standby_count >= 5 {
-                        if let Some(code) = &last_active_code { let _ = complete_latest_for_code(code); }
-                        awaiting_reset = false;
+      // retry loop: keep attempting to open the port until stopped
+      'outer: loop {
+        if stop_c.load(Ordering::Relaxed) { break 'outer; }
+        let mut last_active_code: Option<String> = None;
+        let mut awaiting_reset = false;
+        let mut standby_count: u32 = 0;
+        match serialport::new(&port_name, 9600)
+          .timeout(Duration::from_millis(200))
+          .open() {
+            Ok(mut port) => {
+              let _ = app.emit("serial-connected", &port_name);
+              let mut buf = [0u8; 1024];
+              // read loop until error or stop
+              while !stop_c.load(Ordering::Relaxed) {
+                match port.read(&mut buf) {
+                  Ok(n) if n > 0 => {
+                    let s = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let _ = app.emit("serial-data", &s);
+                    // treat 99: as standby pulse
+                    if s.contains("99:") {
+                      let _ = app.emit("serial-standby-ok", &());
+                      if awaiting_reset {
+                        standby_count = standby_count.saturating_add(1);
+                        if standby_count >= 5 {
+                          if let Some(code) = &last_active_code { let _ = complete_latest_for_code(code); }
+                          awaiting_reset = false;
+                        }
                       }
                     }
-                  }
-                  // try parse lines like "<code>: <adc>"
-                  for part in s.split(|c| c == '\n' || c == '\r') {
-                    if let Some((code_str, rest)) = part.split_once(':') {
-                      let code = code_str.trim();
-                      let rest_trim = rest.trim();
-                      // Enclose/response: patterns like "901:" (no ADC required)
-                      if code.len() == 3 && code.starts_with("90") && code.chars().all(|c| c.is_ascii_digit()) && rest_trim.is_empty() {
-                        let _ = handle_enclose(&app, code);
-                        awaiting_reset = false;
-                        continue;
-                      }
-                      // Valid trigger with ADC
-                      let val = rest_trim.split_whitespace().next().unwrap_or("");
-                      if code.len() == 3 && code.chars().all(|c| c.is_ascii_digit()) && val.chars().all(|c| c.is_ascii_digit()) {
-                        let adc: i32 = val.parse().unwrap_or(0);
-                        if code.starts_with("90") { awaiting_reset = false; }
-                        handle_trigger(&app, code, adc);
-                        if !code.starts_with("90") {
-                          last_active_code = Some(code.to_string());
-                          awaiting_reset = true; standby_count = 0;
+                    // try parse lines like "<code>: <adc>"
+                    for part in s.split(|c| c == '\n' || c == '\r') {
+                      if let Some((code_str, rest)) = part.split_once(':') {
+                        let code = code_str.trim();
+                        let rest_trim = rest.trim();
+                        // Enclose/response: patterns like "901:" (no ADC required)
+                        if code.len() == 3 && code.starts_with("90") && code.chars().all(|c| c.is_ascii_digit()) && rest_trim.is_empty() {
+                          let _ = handle_enclose(&app, code);
+                          awaiting_reset = false;
+                          continue;
+                        }
+                        // Valid trigger with ADC
+                        let val = rest_trim.split_whitespace().next().unwrap_or("");
+                        if code.len() == 3 && code.chars().all(|c| c.is_ascii_digit()) && val.chars().all(|c| c.is_ascii_digit()) {
+                          let adc: i32 = val.parse().unwrap_or(0);
+                          if code.starts_with("90") { awaiting_reset = false; }
+                          handle_trigger(&app, code, adc);
+                          if !code.starts_with("90") {
+                            last_active_code = Some(code.to_string());
+                            awaiting_reset = true; standby_count = 0;
+                          }
                         }
                       }
                     }
                   }
+                  Ok(_) => {}
+                  Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
+                  Err(_e) => { break; }
                 }
-                Ok(_) => {}
-                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
-                Err(_) => { break; }
               }
+              // leaving read loop: disconnected or stopped
+              let _ = app.emit("serial-disconnected", &());
+              // slight delay before retrying
+              std::thread::sleep(Duration::from_millis(800));
+            }
+            Err(e) => {
+              // emit throttled error and retry
+              if should_emit(&format!("open_err:{}", port_name), 3000) {
+                let _ = app.emit("serial-error", &format!("{} (retrying)", e));
+              }
+              // backoff before retrying
+              std::thread::sleep(Duration::from_millis(1000));
             }
           }
-          Err(e) => {
-            let _ = app.emit("serial-error", &format!("{}", e));
-          }
-        }
-      let _ = app.emit("serial-disconnected", &());
+      }
     });
     Ok(Self { stop, handle: Some(handle) })
   }
@@ -148,6 +161,15 @@ fn handle_trigger(app: &AppHandle, code: &str, adc: i32) {
   }
 
   if adc < threshold { return; }
+
+  // De-dup: if there is already an active record for this code, do not append or emit again
+  if let Some(arr) = v.get("callHistoryStorage").and_then(|a| a.as_array()) {
+    let exists_active = arr.iter().any(|rec|
+      rec.get("code").and_then(|s| s.as_str()) == Some(code)
+        && rec.get("status").and_then(|s| s.as_str()) != Some("completed")
+    );
+    if exists_active { return; }
+  }
 
   let mut room = String::new();
   let mut bed = String::new();

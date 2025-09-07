@@ -47,7 +47,7 @@ export default function MasterSettings() {
   // Reflect backend connection state immediately via Tauri events
   useEffect(() => {
     if (!isTauri()) return;
-    let un1: any, un2: any;
+    let un1: any, un2: any, un3: any;
     listen<string>('serial-connected', (e) => {
       setConnected(true);
       setMonitor(m => m + `\n[${new Date().toLocaleTimeString()}] Connected to ${e.payload || cfg.com}`);
@@ -56,7 +56,11 @@ export default function MasterSettings() {
       setConnected(false);
       setMonitor(m => m + `\n[${new Date().toLocaleTimeString()}] Disconnected.`);
     }).then(u => un2 = u);
-    return () => { if (un1) un1(); if (un2) un2(); };
+    listen<string>('serial-error', (e) => {
+      setConnected(false);
+      setMonitor(m => m + `\n[${new Date().toLocaleTimeString()}] Connect error: ${e.payload || 'busy'}. Retrying...`);
+    }).then(u => un3 = u);
+    return () => { if (un1) un1(); if (un2) un2(); if (un3) un3(); };
   }, [cfg.com]);
   // Try auto-connect with saved port if available
   useEffect(() => {
@@ -122,36 +126,11 @@ export default function MasterSettings() {
       const unlisten1 = await listen<string>('serial-data', e => setMonitor(m => m + e.payload));
       const unlisten2 = await listen('serial-standby-ok', () => window.dispatchEvent(new Event('serial-standby-ok')));
       setProc({ unlisten1, unlisten2 } as any);
-
-      // Await confirmation via events to avoid false-positive connects
-      const ok = await new Promise<boolean>(async (resolve) => {
-        let done = false;
-        const t = window.setTimeout(() => { if (!done) { done = true; resolve(false); } }, 3000);
-        const u1 = await listen<string>('serial-connected', (e) => {
-          if (done) return; done = true;
-          try { window.clearTimeout(t); } catch {}
-          resolve(true);
-        });
-        const u2 = await listen<string>('serial-error', (e) => {
-          if (done) return; done = true;
-          try { window.clearTimeout(t); } catch {}
-          resolve(false);
-        });
-        // ensure cleanup after settle
-        const cleanup = (r: boolean) => { try { (u1 as any)(); } catch {}; try { (u2 as any)(); } catch {}; return r; };
-        // wrap resolve to run cleanup
-        const origResolve = resolve as any;
-      });
-      if (ok) {
-        setConnected(true);
-        setMonitor(m => m + `\n[${new Date().toLocaleTimeString()}] Connected to ${cfg.com} @9600`);
-        notifications.show({ title: 'Hardware Successfully Connected', message: `Connected to ${cfg.com}`, color: 'teal' });
-      } else {
-        setConnected(false);
-        notifications.show({ title: 'Connect failed', message: `Port ${cfg.com} not available`, color: 'red' });
-      }
+      // Log connecting intent; backend will auto-retry if busy and emit events when connected
+      setMonitor(m => m + `\n[${new Date().toLocaleTimeString()}] Connecting to ${cfg.com} @9600 (auto-retry if busy)...`);
     } catch (e) {
-      notifications.show({ title: 'Connect failed', message: String(e), color: 'red' });
+      // Avoid noisy notifications; rely on events and monitor log
+      setMonitor(m => m + `\n[${new Date().toLocaleTimeString()}] Connect invoke error: ${String(e)}. Retrying...`);
     }
   }
   async function disconnect() {

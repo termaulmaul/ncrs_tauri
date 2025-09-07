@@ -82,7 +82,13 @@ export default function () {
     const queueRef = useRef<{ code: string; files: string[] }[]>([]);
     const currentCodeRef = useRef<string | null>(null);
     const closedCodesRef = useRef<Set<string>>(new Set());
+    // Track active (triggered but not yet responded) codes to prevent duplicate actions/notifications
+    const activeCodesRef = useRef<Set<string>>(new Set());
+    // Track trigger timestamps per code for accurate response duration
+    const triggerTimesRef = useRef<Map<string, number>>(new Map());
     const playingRef = useRef(false);
+    // Track which codes already sent a Telegram response to avoid duplicates
+    const responseSentRef = useRef<Set<string>>(new Set());
 
     async function ensureAudioUnlocked(): Promise<boolean> {
         if (audioUnlockedRef.current) return true;
@@ -343,6 +349,13 @@ export default function () {
                 const code = String(e.payload?.code || (e.payload?.display || ''));
                 // ignore if code already enclosed
                 if (code && closedCodesRef.current.has(code)) return;
+                // de-dup: if this code is already active (no response yet), skip re-trigger
+                if (code && activeCodesRef.current.has(code)) return;
+                if (code) activeCodesRef.current.add(code);
+                // allow future response notification for this code (fresh trigger)
+                if (code) responseSentRef.current.delete(code);
+                // record trigger start time
+                if (code) triggerTimesRef.current.set(code, Date.now());
                 enqueueSounds(code, files);
                 (async () => {
                     const ok = await audioQueue.ensureUnlocked();
@@ -385,8 +398,12 @@ export default function () {
             listen<{ code: string, display?: string }>('nurse-call-response', (e) => {
                 // Mark this code as enclosed and prevent future enqueues
                 const code = String(e.payload?.code || '');
+                // Hard de-duplication for Telegram/notification side-effects
+                if (code && responseSentRef.current.has(code)) return;
                 if (code) {
                     closedCodesRef.current.add(code);
+                    // allow future triggers for this code after response
+                    activeCodesRef.current.delete(code);
                     try { audioQueue.dropByCode(code); } catch {}
                     // hide ongoing nurse-call notification for this code, if any
                     try { (notifications as any).hide?.(`NC_${code}`); } catch {}
@@ -394,22 +411,31 @@ export default function () {
                 const display = e.payload?.display || e.payload?.code || 'Response';
                 notifications.show({ id: `NR_${code}`, title: 'Nurse Call Response', message: display, color: 'teal' });
                 try { osNotify('NURSE CALL RESPONSE', display); } catch {}
-                // Telegram with duration (best-effort lookback from config)
+                // Telegram with duration (prefer in-memory start; fallback to config)
                 (async () => {
-                    let startedAt: string | undefined;
-                    try {
-                        const cfg = await fetch('/config.json?ts=' + Date.now());
-                        if (cfg.ok) {
-                            const json = await cfg.json();
-                            const arr: any[] = json?.callHistoryStorage || [];
-                            const last = arr.slice().reverse().find(r => String(r.code || '') === code);
-                            if (last) startedAt = String(last.timestamp || last.callTime || '');
-                        }
-                    } catch {}
+                    // mark as sent early to avoid race if multiple events arrive closely
+                    if (code) responseSentRef.current.add(code);
                     let dur: number | undefined = undefined;
                     const end = new Date();
-                    if (startedAt) {
-                        try { dur = Math.max(0, Math.round((end.getTime() - new Date(startedAt).getTime()) / 1000)); } catch {}
+                    const startedAtMs = code ? triggerTimesRef.current.get(code) : undefined;
+                    if (typeof startedAtMs === 'number') {
+                        dur = Math.max(0, Math.round((end.getTime() - startedAtMs) / 1000));
+                        if (code) triggerTimesRef.current.delete(code);
+                    } else {
+                        // fallback to persisted config if no in-memory timestamp
+                        let startedAt: string | undefined;
+                        try {
+                            const cfg = await fetch('/config.json?ts=' + Date.now());
+                            if (cfg.ok) {
+                                const json = await cfg.json();
+                                const arr: any[] = json?.callHistoryStorage || [];
+                                const last = arr.slice().reverse().find(r => String(r.code || '') === code);
+                                if (last) startedAt = String(last.timestamp || last.callTime || '');
+                            }
+                        } catch {}
+                        if (startedAt) {
+                            try { dur = Math.max(0, Math.round((end.getTime() - new Date(startedAt).getTime()) / 1000)); } catch {}
+                        }
                     }
                     let room: string | undefined = undefined;
                     let bed: string | undefined = undefined;
