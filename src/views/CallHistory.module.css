@@ -1,0 +1,130 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.controls {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chart {
+  display: inline-flex;
+  gap: 6px;
+  align-items: flex-end;
+  height: 36px;
+}
+
+.bar {
+  width: 12px;
+  background-color: var(--mantine-color-blue-6);
+}
+
+.barActive {
+  background-color: var(--mantine-color-red-6);
+}
+
+.barCompleted {
+  background-color: var(--mantine-color-green-6);
+}
+
+.tableWrap {
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: 8px;
+  overflow: hidden; /* let inner scroller handle scroll */
+}
+
+.tableScroll {
+  max-height: 50vh;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th, .table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  text-align: left;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  z-index: 1;
+}
+
+.codeCol {
+  display: none;
+}
+
+.statusBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+  color: white;
+}
+
+.active {
+  background-color: var(--mantine-color-red-6);
+}
+
+.completed {
+  background-color: var(--mantine-color-green-6);
+}
+
+.empty {
+  padding: 16px;
+  text-align: center;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+}
+
+/* Print helpers */
+.noPrint { }
+.printOnly { display: none; }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  /* Hide interactive controls and charts on print */
+  .controls,
+  .stats,
+  .tableWrap { display: none !important; }
+
+  .printOnly { display: block !important; }
+
+  /* Ensure table headers repeat and rows don’t split */
+  .printTable { width: 100%; border-collapse: collapse; }
+  .printTable thead { display: table-header-group !important; }
+  .printTable th, .printTable td { padding: 6px 8px; border-bottom: 1px solid #999; text-align: left; }
+  .printTable tr { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Show code column in print */
+  /* no code column in print */
+
+  /* Simpler typography for consistent output */
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

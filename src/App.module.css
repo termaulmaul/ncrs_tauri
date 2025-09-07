@@ -1,0 +1,194 @@
+.simpleBar {
+    max-height: 100vh;
+}
+
+.simpleBar :global(.simplebar-scrollbar)::before {
+    background-color: light-dark(black, white) !important;
+}
+
+.navLink {
+    display: block;
+    width: 100%;
+    padding: var(--mantine-spacing-xs);
+    border-radius: var(--mantine-radius-md);
+    color: light-dark(var(--mantine-color-black), var(--mantine-color-dark-0));
+    text-decoration: none;
+    will-change: transform;
+}
+
+.navIcon {
+    height: 24px;
+    width: auto;
+    display: inline-block;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* Ensure nav link content stays in a row without wrapping */
+.navLink > :global(*) {
+    white-space: nowrap;
+}
+
+/* Make nav icons white in dark mode and default in light mode */
+:global([data-mantine-color-scheme='dark']) .navIcon {
+    filter: invert(1) brightness(1.2);
+}
+:global([data-mantine-color-scheme='light']) .navIcon {
+    filter: none;
+}
+
+.navLink:hover:active {
+    transform: translateY(2px);
+}
+
+.navLinkActive {
+    background-color: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+.navLinkInactive:hover {
+    background-color: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+.titleBarAdjustedHeight {
+    /* used inspect element to find the first part of this calc value */
+    height: calc(var(--_section-height, calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px))) - var(--titlebar-height)) !important;
+    margin-top: var(--titlebar-height);
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    margin-top: var(--titlebar-height);
+}
+
+.headerRightItems {
+    margin-left: auto;
+}
+
+.appTitle {
+    font-family: 'Open Sans', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+    font-weight: 800;
+    /* responsive but capped for header height */
+    font-size: clamp(18px, 2vw, 24px);
+    line-height: 1.1;
+    letter-spacing: 0.3px;
+    color: light-dark(var(--mantine-color-black), var(--mantine-color-gray-2));
+}
+
+.headerBanner {
+    /* Larger logo with comfortable safe insets */
+    height: calc(100% - 16px);
+    max-height: none;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    margin-left: 8px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    align-self: center;
+}
+
+.appShell main {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+}
+
+.mediaQuery {
+    display: none;
+}
+
+.footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.footerIndicators {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.footerChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 12px;
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+    border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+    box-shadow: var(--mantine-shadow-xs);
+}
+
+.dotRed {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--mantine-color-red-6);
+}
+
+.dotGreen {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--mantine-color-green-6);
+}
+
+.dotBlue {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--mantine-color-blue-6);
+}
+
+.iconBlue {
+    color: var(--mantine-color-blue-6);
+}
+
+.footerIcon {
+    height: 1.1em;
+    width: 1.1em;
+    vertical-align: middle;
+}
+
+:global([data-mantine-color-scheme='light']) .footerIcon {
+    /* blue tint for light mode */
+    filter: invert(36%) sepia(72%) saturate(1785%) hue-rotate(199deg) brightness(95%) contrast(100%);
+}
+
+:global([data-mantine-color-scheme='dark']) .footerIcon {
+    /* lighter blue for dark mode */
+    filter: invert(60%) sepia(93%) saturate(648%) hue-rotate(192deg) brightness(105%) contrast(101%);
+}
+
+.footerRight {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.footerBanner {
+    height: 64px;
+    max-height: 100%;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    margin-left: 8px;
+}
+
+.themeIcon {
+    height: 1.5em;
+    width: 1.5em;
+    /* colorize monochrome SVGs to yellow in all themes */
+    filter: invert(76%) sepia(94%) saturate(1240%) hue-rotate(2deg) brightness(103%) contrast(102%);
+}
+.themeButton {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+.themeButton:hover {
+    background: transparent !important;
+}
+
+/* add custom App CSS here */
